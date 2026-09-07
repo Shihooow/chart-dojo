@@ -103,6 +103,7 @@
   canvas{ display:block; width:100%; }
   #priceCanvas{ height:320px; }
   #volCanvas{ height:64px; margin-top:2px; }
+  #rsiCanvas{ height:80px; margin-top:6px; }
 
   .legend{
     display:flex; gap:16px; flex-wrap:wrap;
@@ -223,11 +224,13 @@
     <div class="chart-card">
       <canvas id="priceCanvas"></canvas>
       <canvas id="volCanvas"></canvas>
+      <canvas id="rsiCanvas"></canvas>
     </div>
     <div class="legend">
       <span><i style="background:var(--up)"></i>陽線(上昇)</span>
       <span><i style="background:var(--down)"></i>陰線(下落)</span>
       <span><i style="background:var(--band)"></i>ボリンジャーバンド(±2σ)</span>
+      <span><i style="background:#e6b84a"></i>RSI(14)・破線は70/30</span>
       <span><i style="background:var(--gold)"></i>予想時点</span>
     </div>
 
@@ -345,6 +348,7 @@
 
   var priceCanvas = document.getElementById('priceCanvas');
   var volCanvas = document.getElementById('volCanvas');
+  var rsiCanvas = document.getElementById('rsiCanvas');
 
   function fitCanvas(cv, cssH){
     var dpr = window.devicePixelRatio||1;
@@ -364,9 +368,11 @@
 
     var pf = fitCanvas(priceCanvas, 320);
     var vf = fitCanvas(volCanvas, 64);
+    var rf = fitCanvas(rsiCanvas, 80);
     var ctx = pf.ctx, W=pf.w, H=pf.h;
     var vctx2 = vf.ctx, VW=vf.w, VH=vf.h;
-    ctx.clearRect(0,0,W,H); vctx2.clearRect(0,0,VW,VH);
+    var rctx = rf.ctx, RW=rf.w, RH=rf.h;
+    ctx.clearRect(0,0,W,H); vctx2.clearRect(0,0,VW,VH); rctx.clearRect(0,0,RW,RH);
 
     var padL=6, padR=54, padT=10, padB=8;
     var plotW = W-padL-padR;
@@ -374,18 +380,18 @@
     var slot = plotW/n;
     var bodyW = Math.max(2, Math.min(9, slot*0.62));
 
-    // include BB bands in range calc
+    // include BB bands in range calc (partial-window from the very first candle, so the
+    // band is visible across the whole chart rather than only appearing near the end)
     var maxH=-Infinity, minL=Infinity;
     for(var i=0;i<n;i++){ maxH=Math.max(maxH,data[i].h); minL=Math.min(minL,data[i].l); }
-    var bbSeries = [];
+    var bbSeries = [], rsiSeries = [];
     for(i=0;i<n;i++){
-      if(i>=LONG-1){
-        var mid = sma(closes,LONG,i);
-        var sd = stddev(closes,LONG,i,mid);
-        var up = mid+2*sd, lo = mid-2*sd;
-        bbSeries.push({mid:mid,up:up,lo:lo});
-        maxH=Math.max(maxH,up); minL=Math.min(minL,lo);
-      } else bbSeries.push(null);
+      var mid = sma(closes,LONG,i);
+      var sd = stddev(closes,LONG,i,mid);
+      var up = mid+2*sd, lo = mid-2*sd;
+      bbSeries.push({mid:mid,up:up,lo:lo});
+      maxH=Math.max(maxH,up); minL=Math.min(minL,lo);
+      rsiSeries.push(rsi(closes,14,i));
     }
     var range=(maxH-minL)||1; maxH+=range*0.06; minL-=range*0.06; range=maxH-minL;
 
@@ -441,6 +447,31 @@
     }
     vctx2.fillStyle='rgba(154,167,184,0.55)'; vctx2.font='9px "Noto Sans JP", sans-serif'; vctx2.textAlign='left';
     vctx2.fillText('出来高', 2, 10);
+
+    // RSI subplot (fixed 0-100 scale, 70/30 reference lines)
+    var rPadT=8, rPadB=8;
+    function ryOf(v){ return rPadT + (100-v)/100*(RH-rPadT-rPadB); }
+    rctx.strokeStyle='rgba(255,255,255,0.05)';
+    [0,30,50,70,100].forEach(function(v){
+      var y=ryOf(v);
+      rctx.beginPath(); rctx.moveTo(0,y); rctx.lineTo(RW,y); rctx.stroke();
+    });
+    rctx.setLineDash([3,3]); rctx.strokeStyle='rgba(224,70,79,0.4)';
+    rctx.beginPath(); rctx.moveTo(0,ryOf(70)); rctx.lineTo(RW,ryOf(70)); rctx.stroke();
+    rctx.strokeStyle='rgba(79,143,232,0.4)';
+    rctx.beginPath(); rctx.moveTo(0,ryOf(30)); rctx.lineTo(RW,ryOf(30)); rctx.stroke();
+    rctx.setLineDash([]);
+    rctx.beginPath();
+    for(i=0;i<n;i++){
+      var rx=xOf(i), ry=ryOf(rsiSeries[i]);
+      if(i===0) rctx.moveTo(rx,ry); else rctx.lineTo(rx,ry);
+    }
+    rctx.strokeStyle='#e6b84a'; rctx.lineWidth=1.4; rctx.stroke();
+    rctx.fillStyle='rgba(154,167,184,0.55)'; rctx.font='9px "Noto Sans JP", sans-serif'; rctx.textAlign='left';
+    rctx.fillText('RSI(14)', 2, 10);
+    rctx.fillStyle='rgba(154,167,184,0.4)'; rctx.font='9px "Roboto Mono", monospace'; rctx.textAlign='right';
+    rctx.fillText('70', RW-2, ryOf(70)-2);
+    rctx.fillText('30', RW-2, ryOf(30)+9);
 
     var lastP = data[n-1].c;
     var ly = yOf(lastP);
