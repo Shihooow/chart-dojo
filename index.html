@@ -104,6 +104,7 @@
   #priceCanvas{ height:320px; }
   #volCanvas{ height:64px; margin-top:2px; }
   #rsiCanvas{ height:80px; margin-top:6px; }
+  #macdCanvas{ height:80px; margin-top:6px; }
 
   .legend{
     display:flex; gap:16px; flex-wrap:wrap;
@@ -203,7 +204,7 @@
     <div class="brand">
       <div class="kicker">CHART READING TRAINING</div>
       <h1>チャート道場</h1>
-      <div class="lede">実在する日本株のチャートで、次の値動きを予想して当てるトレーニング。日足・週足・月足を切り替えながら、出来高・取引代金・RSI・ボリンジャーバンドをセットで確認して読む練習ができます。</div>
+      <div class="lede">実在する日本株のチャートで、次の値動きを予想して当てるトレーニング。日足・週足・月足を切り替えながら、出来高・取引代金・RSI・ボリンジャーバンド・MACDをセットで確認して読む練習ができます。</div>
     </div>
     <div class="stats">
       <div class="stat"><div class="v num" id="statCount">0</div><div class="l">出題数</div></div>
@@ -225,12 +226,15 @@
       <canvas id="priceCanvas"></canvas>
       <canvas id="volCanvas"></canvas>
       <canvas id="rsiCanvas"></canvas>
+      <canvas id="macdCanvas"></canvas>
     </div>
     <div class="legend">
       <span><i style="background:var(--up)"></i>陽線(上昇)</span>
       <span><i style="background:var(--down)"></i>陰線(下落)</span>
       <span><i style="background:var(--band)"></i>ボリンジャーバンド(±2σ)</span>
       <span><i style="background:#e6b84a"></i>RSI(14)・破線は70/30</span>
+      <span><i style="background:#c7cede"></i>MACD</span>
+      <span><i style="background:#d8a94a"></i>シグナル線</span>
       <span><i style="background:var(--gold)"></i>予想時点</span>
     </div>
 
@@ -267,6 +271,7 @@
         <div class="ind"><div class="lab">短期トレンド</div><div class="val" id="indTrend">–</div></div>
         <div class="ind"><div class="lab">RSI (14)</div><div class="val" id="indRsi">–</div></div>
         <div class="ind"><div class="lab">ボリンジャーバンド</div><div class="val" id="indBB">–</div></div>
+        <div class="ind"><div class="lab">MACD</div><div class="val" id="indMacd">–</div></div>
         <div class="ind"><div class="lab">取引代金(概算)</div><div class="val" id="indTurnover">–</div></div>
         <div class="ind"><div class="lab">直近の値動きの形</div><div class="val" id="indShape">–</div></div>
       </div>
@@ -312,6 +317,20 @@
     var rs=avgG/avgL;
     return 100-(100/(1+rs));
   }
+  function ema(arr, period){
+    var k = 2/(period+1);
+    var out = new Array(arr.length);
+    out[0] = arr[0];
+    for(var i=1;i<arr.length;i++){ out[i] = arr[i]*k + out[i-1]*(1-k); }
+    return out;
+  }
+  function macdSeries(closesSlice){
+    var e12 = ema(closesSlice,12), e26 = ema(closesSlice,26);
+    var macdLine = closesSlice.map(function(_,i){ return e12[i]-e26[i]; });
+    var signalLine = ema(macdLine,9);
+    var hist = macdLine.map(function(v,i){ return v-signalLine[i]; });
+    return {macd:macdLine, signal:signalLine, hist:hist};
+  }
   function fmt(n){ return Math.round(n).toLocaleString(); }
   function fmtYen(n){
     if(n>=100000000) return (n/100000000).toFixed(1)+'億円';
@@ -349,6 +368,7 @@
   var priceCanvas = document.getElementById('priceCanvas');
   var volCanvas = document.getElementById('volCanvas');
   var rsiCanvas = document.getElementById('rsiCanvas');
+  var macdCanvas = document.getElementById('macdCanvas');
 
   function fitCanvas(cv, cssH){
     var dpr = window.devicePixelRatio||1;
@@ -369,10 +389,12 @@
     var pf = fitCanvas(priceCanvas, 320);
     var vf = fitCanvas(volCanvas, 64);
     var rf = fitCanvas(rsiCanvas, 80);
+    var mf = fitCanvas(macdCanvas, 80);
     var ctx = pf.ctx, W=pf.w, H=pf.h;
     var vctx2 = vf.ctx, VW=vf.w, VH=vf.h;
     var rctx = rf.ctx, RW=rf.w, RH=rf.h;
-    ctx.clearRect(0,0,W,H); vctx2.clearRect(0,0,VW,VH); rctx.clearRect(0,0,RW,RH);
+    var mctx = mf.ctx, MW=mf.w, MH=mf.h;
+    ctx.clearRect(0,0,W,H); vctx2.clearRect(0,0,VW,VH); rctx.clearRect(0,0,RW,RH); mctx.clearRect(0,0,MW,MH);
 
     var padL=6, padR=54, padT=10, padB=8;
     var plotW = W-padL-padR;
@@ -393,6 +415,7 @@
       maxH=Math.max(maxH,up); minL=Math.min(minL,lo);
       rsiSeries.push(rsi(closes,14,i));
     }
+    var macd = macdSeries(closes.slice(0,n));
     var range=(maxH-minL)||1; maxH+=range*0.06; minL-=range*0.06; range=maxH-minL;
 
     function yOf(p){ return padT + (maxH-p)/range*(H-padT-padB); }
@@ -473,6 +496,30 @@
     rctx.fillText('70', RW-2, ryOf(70)-2);
     rctx.fillText('30', RW-2, ryOf(30)+9);
 
+    // MACD subplot (MACDライン・シグナル線・ヒストグラム)
+    var mPadT=8, mPadB=8;
+    var mAll = macd.macd.concat(macd.signal).concat(macd.hist);
+    var mMax=-Infinity, mMin=Infinity;
+    for(i=0;i<mAll.length;i++){ mMax=Math.max(mMax,mAll[i]); mMin=Math.min(mMin,mAll[i]); }
+    var mRange = (mMax-mMin)||1; mMax+=mRange*0.12; mMin-=mRange*0.12; mRange=mMax-mMin;
+    function myOf(v){ return mPadT + (mMax-v)/mRange*(MH-mPadT-mPadB); }
+    mctx.strokeStyle='rgba(255,255,255,0.08)';
+    mctx.beginPath(); mctx.moveTo(0,myOf(0)); mctx.lineTo(MW,myOf(0)); mctx.stroke();
+    for(i=0;i<n;i++){
+      var mx=xOf(i), hv=macd.hist[i];
+      mctx.fillStyle = hv>=0? 'rgba(224,70,79,0.55)' : 'rgba(79,143,232,0.55)';
+      var hy0=myOf(0), hy1=myOf(hv);
+      mctx.fillRect(mx-bodyW/2, Math.min(hy0,hy1), bodyW, Math.max(1,Math.abs(hy1-hy0)));
+    }
+    mctx.beginPath();
+    for(i=0;i<n;i++){ var lx=xOf(i), ly2=myOf(macd.macd[i]); if(i===0) mctx.moveTo(lx,ly2); else mctx.lineTo(lx,ly2); }
+    mctx.strokeStyle='#c7cede'; mctx.lineWidth=1.3; mctx.stroke();
+    mctx.beginPath();
+    for(i=0;i<n;i++){ var sx=xOf(i), sy=myOf(macd.signal[i]); if(i===0) mctx.moveTo(sx,sy); else mctx.lineTo(sx,sy); }
+    mctx.strokeStyle='#d8a94a'; mctx.lineWidth=1.2; mctx.stroke();
+    mctx.fillStyle='rgba(154,167,184,0.55)'; mctx.font='9px "Noto Sans JP", sans-serif'; mctx.textAlign='left';
+    mctx.fillText('MACD', 2, 10);
+
     var lastP = data[n-1].c;
     var ly = yOf(lastP);
     ctx.fillStyle='rgba(216,169,74,0.16)'; ctx.fillRect(W-padR+2, ly-8, 50, 16);
@@ -504,13 +551,20 @@
     var avgTurnover5 = 0; for(var i=Math.max(0,idx-4);i<=idx;i++) avgTurnover5+=candles[i].turnover; avgTurnover5/=Math.min(5,idx+1);
     var turnoverRatio = avgTurnover5>0 ? turnover/avgTurnover5 : 1;
 
+    var macdD = macdSeries(closes);
+    var macdVal = macdD.macd[idx], macdSig = macdD.signal[idx], macdHist = macdD.hist[idx];
+    var macdPrevHist = idx>0 ? macdD.hist[idx-1] : macdHist;
+    var macdCross = (macdPrevHist<0 && macdHist>=0) ? 'golden' : (macdPrevHist>0 && macdHist<=0) ? 'dead' : 'none';
+
     var score=0;
     score += (s5>sLong)?1:-1;
     if(r>=58) score+=0.6; else if(r<=42) score-=0.6;
     if(shape==='uptrend') score+=1; else if(shape==='downtrend') score-=1;
     if(z>=1.5) score-=0.4; else if(z<=-1.5) score+=0.4; // near band edges -> mean reversion nudge
+    if(macdVal>macdSig) score+=0.6; else score-=0.6;
 
-    return {s5:s5,sLong:sLong,rsi:r,shape:shape,score:score,mid:mid,upBand:upBand,loBand:loBand,z:z,turnover:turnover,turnoverRatio:turnoverRatio};
+    return {s5:s5,sLong:sLong,rsi:r,shape:shape,score:score,mid:mid,upBand:upBand,loBand:loBand,z:z,turnover:turnover,turnoverRatio:turnoverRatio,
+      macd:macdVal,macdSignal:macdSig,macdHist:macdHist,macdCross:macdCross};
   }
 
   function buildExplanation(ind, actualUp, changePct){
@@ -527,6 +581,11 @@
     if(ind.z>=1.5) lines.push('株価はボリンジャーバンドの上限付近まで拡張しており、短期的な反落リスクも意識される位置でした。');
     else if(ind.z<=-1.5) lines.push('株価はボリンジャーバンドの下限付近まで拡張しており、自律反発も意識される位置でした。');
     else lines.push('株価はボリンジャーバンドの中央帯付近で、バンドからの過熱シグナルは出ていませんでした。');
+
+    if(ind.macdCross==='golden') lines.push('MACDはちょうどシグナル線を下から上に抜けるゴールデンクロス直後でした。');
+    else if(ind.macdCross==='dead') lines.push('MACDはちょうどシグナル線を上から下に抜けるデッドクロス直後でした。');
+    else if(ind.macd>ind.macdSignal) lines.push('MACDはシグナル線の上にあり、短期的な勢いは上向きでした。');
+    else lines.push('MACDはシグナル線の下にあり、短期的な勢いは下向きでした。');
 
     if(ind.turnoverRatio>=1.4) lines.push('取引代金は直近5日平均の'+ind.turnoverRatio.toFixed(1)+'倍に増えており、値動きへの関心が高まっていました。');
 
@@ -611,6 +670,7 @@
     document.getElementById('indTrend').innerHTML = (ind.s5>ind.sLong? 'SMA5 > SMA'+LONG+' <span class="pill bull">強気</span>' : 'SMA5 < SMA'+LONG+' <span class="pill bear">弱気</span>');
     document.getElementById('indRsi').innerHTML = ind.rsi.toFixed(0) + (ind.rsi>=70?' <span class="pill bull">過熱</span>': ind.rsi<=30?' <span class="pill bear">売られ過ぎ</span>':' <span class="pill flat">中立</span>');
     document.getElementById('indBB').innerHTML = (ind.z>=1.5? '上限付近 <span class="pill bull">拡張</span>' : ind.z<=-1.5? '下限付近 <span class="pill bear">拡張</span>' : '中央帯 <span class="pill flat">平常</span>') + '<br><span style="font-size:11px;color:var(--ink-mute)">σ位置: '+ind.z.toFixed(2)+'</span>';
+    document.getElementById('indMacd').innerHTML = (ind.macdCross==='golden'? 'ゴールデンクロス <span class="pill bull">直後</span>' : ind.macdCross==='dead'? 'デッドクロス <span class="pill bear">直後</span>' : ind.macd>ind.macdSignal? 'シグナル線の上 <span class="pill bull">強気</span>' : 'シグナル線の下 <span class="pill bear">弱気</span>') + '<br><span style="font-size:11px;color:var(--ink-mute)">MACD: '+ind.macd.toFixed(1)+' / signal: '+ind.macdSignal.toFixed(1)+'</span>';
     document.getElementById('indTurnover').innerHTML = fmtYen(ind.turnover) + '<br><span style="font-size:11px;color:var(--ink-mute)">5日平均比 '+ind.turnoverRatio.toFixed(1)+'倍</span>';
     document.getElementById('indShape').innerHTML = ind.shape==='uptrend' ? '切り上げ型 <span class="pill bull">上昇</span>' : ind.shape==='downtrend' ? '切り下げ型 <span class="pill bear">下降</span>' : 'レンジ型 <span class="pill flat">中立</span>';
 
