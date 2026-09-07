@@ -86,6 +86,46 @@
   .ticker-tag .code{ font-family:"Roboto Mono",monospace; color:var(--gold); font-weight:600; }
   .real-note{ font-size:11px; color:var(--ink-mute); }
   .real-note b{ color:var(--good); font-weight:600; }
+  .review-badge{
+    background: rgba(216,169,74,0.18); color: var(--gold);
+    font-size:10.5px; padding:2px 9px; border-radius:999px; font-weight:600; letter-spacing:0.02em;
+  }
+
+  .stats-col{ display:flex; flex-direction:column; align-items:flex-end; gap:8px; }
+  .report-btn{
+    font-family:"Noto Sans JP",sans-serif; font-size:12px; color:var(--ink-dim);
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    padding:8px 14px; cursor:pointer; white-space:nowrap;
+  }
+  .report-btn:hover{ color:var(--ink); border-color:var(--gold-soft); }
+
+  .report-overlay{
+    position:fixed; inset:0; background:rgba(5,7,10,0.72);
+    align-items:center; justify-content:center; padding:20px; z-index:50;
+  }
+  .report-overlay:not([hidden]){ display:flex; }
+  .report-modal{
+    background:var(--bg-soft); border:1px solid var(--border); border-radius:16px;
+    max-width:560px; width:100%; max-height:85vh; overflow-y:auto;
+    padding:22px 22px 26px;
+  }
+  .report-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .report-head h2{ font-family:"Zen Kaku Gothic Antique",sans-serif; font-size:18px; margin:0; color:var(--ink); }
+  .report-close{ background:transparent; border:none; color:var(--ink-mute); font-size:22px; line-height:1; cursor:pointer; padding:4px 8px; }
+  .report-close:hover{ color:var(--ink); }
+  .report-empty{ color:var(--ink-dim); font-size:13.5px; line-height:1.7; }
+  .report-overall{ text-align:center; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:18px; }
+  .report-overall .v{ font-family:"Roboto Mono",monospace; font-size:28px; font-weight:700; color:var(--gold); }
+  .report-overall .l{ font-size:11px; color:var(--ink-mute); margin-top:4px; }
+  .report-section{ margin-bottom:16px; }
+  .report-section-h{ font-size:12px; color:var(--ink-dim); font-weight:600; margin-bottom:8px; letter-spacing:0.02em; }
+  .report-row{ margin-bottom:8px; }
+  .report-row-top{ display:flex; justify-content:space-between; font-size:12.5px; color:var(--ink); margin-bottom:4px; gap:8px; }
+  .report-row-top span:first-child{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .report-row-top .num{ color:var(--ink-mute); font-size:11.5px; flex:none; }
+  .report-bar{ height:6px; background:var(--panel-2); border-radius:4px; overflow:hidden; }
+  .report-bar-fill{ height:100%; border-radius:4px; }
+  .report-note{ font-size:11.5px; color:var(--ink-mute); margin-top:6px; line-height:1.7; }
 
   .chart-card{
     background: var(--bg-soft);
@@ -195,6 +235,9 @@
     .predict-btn{ max-width:none; }
     .stats{ width:100%; justify-content:space-between; }
     .stat{ min-width:0; flex:1; }
+    .stats-col{ width:100%; align-items:stretch; }
+    .report-btn{ width:100%; }
+    .report-modal{ padding:18px 16px 22px; }
   }
 </style>
 
@@ -207,11 +250,14 @@
       <h1>チャート道場</h1>
       <div class="lede">実在する日本株のチャートで、次の値動きを予想して当てるトレーニング。日足・週足・月足を切り替えながら、出来高・取引代金・RSI・ボリンジャーバンド・MACDをセットで確認して読む練習ができます。</div>
     </div>
-    <div class="stats">
-      <div class="stat"><div class="v num" id="statCount">0</div><div class="l">出題数</div></div>
-      <div class="stat"><div class="v num" id="statRate">–</div><div class="l">正答率</div></div>
-      <div class="stat"><div class="v num" id="statStreak">0</div><div class="l">連続正解</div></div>
-      <div class="stat"><div class="v num" id="statBest">0</div><div class="l">最高連続</div></div>
+    <div class="stats-col">
+      <div class="stats">
+        <div class="stat"><div class="v num" id="statCount">0</div><div class="l">出題数</div></div>
+        <div class="stat"><div class="v num" id="statRate">–</div><div class="l">正答率</div></div>
+        <div class="stat"><div class="v num" id="statStreak">0</div><div class="l">連続正解</div></div>
+        <div class="stat"><div class="v num" id="statBest">0</div><div class="l">最高連続</div></div>
+      </div>
+      <button id="reportBtn" class="report-btn" type="button">📊 レポートを見る</button>
     </div>
   </header>
 
@@ -219,7 +265,7 @@
 
   <div id="game" hidden>
     <div class="round-meta">
-      <div class="ticker-tag"><span class="code" id="tickerCode">----</span><span id="tickerName">–</span></div>
+      <div class="ticker-tag"><span class="code" id="tickerCode">----</span><span id="tickerName">–</span><span id="reviewBadge" class="review-badge" hidden>復習</span></div>
       <div class="real-note"><b>実データ</b> ・ Yahoo!ファイナンス取得（<span id="dataRange">–</span>）</div>
     </div>
 
@@ -284,6 +330,16 @@
       </div>
 
       <div class="next-row"><button id="nextBtn">次の問題へ →</button></div>
+    </div>
+  </div>
+
+  <div class="report-overlay" id="reportOverlay" hidden>
+    <div class="report-modal">
+      <div class="report-head">
+        <h2>学習レポート</h2>
+        <button class="report-close" id="reportClose" type="button" aria-label="閉じる">×</button>
+      </div>
+      <div id="reportBody"></div>
     </div>
   </div>
 
@@ -356,6 +412,7 @@
   var phase = 'predicting';
   var revealCount = 0;
   var revealTimer = null;
+  var isReviewRound = false;
 
   var stats = {count:0, correct:0, streak:0, best:0};
   try{ var saved = JSON.parse(localStorage.getItem('chartDojoRealStats')||'null'); if(saved) stats = saved; }catch(e){}
@@ -365,6 +422,31 @@
     document.getElementById('statRate').textContent = stats.count? Math.round(stats.correct/stats.count*100)+'%' : '–';
     document.getElementById('statStreak').textContent = stats.streak;
     document.getElementById('statBest').textContent = stats.best;
+  }
+
+  // 出題履歴(復習の判定・レポート集計に使用。端末のlocalStorageに保存、最大300件保持)
+  var REVIEW_EVERY = 10;
+  var HISTORY_CAP = 300;
+  var attemptHistory = [];
+  try{ var savedHist = JSON.parse(localStorage.getItem('chartDojoHistory')||'null'); if(Array.isArray(savedHist)) attemptHistory = savedHist; }catch(e){}
+  function pushHistory(rec){
+    attemptHistory.push(rec);
+    if(attemptHistory.length>HISTORY_CAP) attemptHistory = attemptHistory.slice(attemptHistory.length-HISTORY_CAP);
+    try{ localStorage.setItem('chartDojoHistory', JSON.stringify(attemptHistory)); }catch(e){}
+  }
+  // 「一度でも間違えた」問題のうち、直近の挑戦がまだ不正解のもの(=復習が必要なもの)を返す
+  function reviewPool(){
+    var latest = {};
+    attemptHistory.forEach(function(h){
+      var key = h.code+'|'+h.timeframe+'|'+h.horizon+'|'+h.anchorDate;
+      if(!latest[key] || h.ts>latest[key].ts) latest[key]=h;
+    });
+    return Object.keys(latest).map(function(k){ return latest[k]; }).filter(function(h){ return !h.correct; });
+  }
+  function pickReviewItem(){
+    var pool = reviewPool();
+    if(pool.length===0) return null;
+    return pool[Math.floor(Math.random()*pool.length)];
   }
 
   var priceCanvas = document.getElementById('priceCanvas');
@@ -632,10 +714,21 @@
     });
   }
 
-  function startRound(){
+  function startRound(reviewItem){
     var candles = cds();
     var total = candles.length;
-    VISIBLE = Math.max(10, total-5);
+    isReviewRound = false;
+    if(reviewItem){
+      var idx = candles.findIndex(function(c){ return c.date===reviewItem.anchorDate; });
+      if(idx>=9 && idx+horizon<total){
+        VISIBLE = idx+1;
+        isReviewRound = true;
+      } else {
+        VISIBLE = Math.max(10, total-5);
+      }
+    } else {
+      VISIBLE = Math.max(10, total-5);
+    }
     LONG = Math.min(20, VISIBLE);
     phase='predicting'; revealCount=0;
 
@@ -643,6 +736,7 @@
     document.getElementById('tickerCode').textContent = current.code;
     document.getElementById('tickerName').textContent = current.name;
     document.getElementById('dataRange').textContent = candles[0].date+' 〜 '+candles[VISIBLE-1].date+'（'+TF_META[TIMEFRAME].label+'）';
+    document.getElementById('reviewBadge').hidden = !isReviewRound;
     document.getElementById('reveal').hidden = true;
     document.getElementById('btnUp').disabled = false;
     document.getElementById('btnDown').disabled = false;
@@ -651,7 +745,20 @@
   }
 
   function newRound(){
-    // 新しい問題: 銘柄をランダムに選び直す
+    // 10問ごとに1問、過去に間違えた問題(復習)を混ぜる。それ以外は銘柄をランダムに選び直す
+    var due = (stats.count>0 && stats.count % REVIEW_EVERY === 0) ? pickReviewItem() : null;
+    if(due){
+      var stock = stocks.filter(function(s){ return s.code===due.code; })[0];
+      if(stock && stock[due.timeframe] && stock[due.timeframe].length>=16){
+        current = stock;
+        TIMEFRAME = due.timeframe;
+        horizon = due.horizon;
+        document.querySelectorAll('#tfSeg button').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-tf')===TIMEFRAME); });
+        document.querySelectorAll('#horizonSeg button').forEach(function(b){ b.classList.toggle('active', parseInt(b.getAttribute('data-h'),10)===horizon); });
+        startRound(due);
+        return;
+      }
+    }
     current = pickTicker();
     startRound();
   }
@@ -688,6 +795,25 @@
 
     var ind = computeIndicators();
 
+    pushHistory({
+      ts: Date.now(),
+      code: current.code,
+      name: current.name,
+      timeframe: TIMEFRAME,
+      horizon: horizon,
+      anchorDate: candles[VISIBLE-1].date,
+      correct: correct,
+      changePct: changePct,
+      review: isReviewRound,
+      ind: {
+        rsiZone: ind.rsi>=70?'overbought':(ind.rsi<=30?'oversold':'neutral'),
+        trend: ind.s5>ind.sLong?'bull':'bear',
+        bb: ind.z>=1.5?'upper':(ind.z<=-1.5?'lower':'mid'),
+        macd: ind.macdCross!=='none'?ind.macdCross:(ind.macd>ind.macdSignal?'bull':'bear'),
+        shape: ind.shape
+      }
+    });
+
     document.getElementById('verdict').className = 'verdict '+(correct?'hit':'miss');
     document.getElementById('verdictMark').textContent = correct?'正解！':'不正解';
     document.getElementById('verdictDetail').innerHTML = horizonLabel(horizon)+'の終値は <b>'+fmt(lastClose)+'</b> → <b>'+fmt(futureClose)+'</b>（'+(changePct>=0?'+':'')+changePct.toFixed(1)+'%）';
@@ -705,6 +831,87 @@
     var target = horizon; revealCount = 0; clearInterval(revealTimer);
     revealTimer = setInterval(function(){ revealCount++; draw(); if(revealCount>=target) clearInterval(revealTimer); }, 160);
   }
+
+  function groupAccuracy(list, keyFn, labelMap){
+    var g = {};
+    list.forEach(function(h){
+      var k = keyFn(h);
+      if(k==null) return;
+      if(!g[k]) g[k] = {total:0, correct:0};
+      g[k].total++; if(h.correct) g[k].correct++;
+    });
+    return Object.keys(g).map(function(k){
+      return {label:(labelMap&&labelMap[k])||k, total:g[k].total, correct:g[k].correct, rate:g[k].correct/g[k].total};
+    }).sort(function(a,b){ return a.rate-b.rate; });
+  }
+
+  function reportBarRow(label, correctN, total, rate){
+    var pct = Math.round(rate*100);
+    var color = rate>=0.6 ? 'var(--good)' : (rate>=0.4 ? 'var(--gold)' : 'var(--miss)');
+    return '<div class="report-row"><div class="report-row-top"><span>'+label+'</span><span class="num">'+correctN+'/'+total+'（'+pct+'%）</span></div>'+
+      '<div class="report-bar"><div class="report-bar-fill" style="width:'+pct+'%;background:'+color+'"></div></div></div>';
+  }
+
+  function renderReport(){
+    var body = document.getElementById('reportBody');
+    if(attemptHistory.length===0){
+      body.innerHTML = '<p class="report-empty">まだ記録がありません。問題に回答すると、ここに正答率や苦手パターンのレポートが表示されます。</p>';
+      return;
+    }
+    var total = attemptHistory.length, correctN = attemptHistory.filter(function(h){return h.correct;}).length;
+    var html = '<div class="report-overall"><div class="v num">'+Math.round(correctN/total*100)+'%</div><div class="l">全体正答率（直近'+total+'問・この端末）</div></div>';
+
+    var dims = [
+      {name:'RSI', keyFn:function(h){ return h.ind&&h.ind.rsiZone; }, labelMap:{overbought:'買われすぎ(RSI≥70)', oversold:'売られすぎ(RSI≤30)', neutral:'中立'}},
+      {name:'短期トレンド(SMA)', keyFn:function(h){ return h.ind&&h.ind.trend; }, labelMap:{bull:'SMA5が中心線より上', bear:'SMA5が中心線より下'}},
+      {name:'ボリンジャーバンド', keyFn:function(h){ return h.ind&&h.ind.bb; }, labelMap:{upper:'上限付近', lower:'下限付近', mid:'中央帯'}},
+      {name:'MACD', keyFn:function(h){ return h.ind&&h.ind.macd; }, labelMap:{golden:'ゴールデンクロス直後', dead:'デッドクロス直後', bull:'シグナル線の上', bear:'シグナル線の下'}},
+      {name:'直近の値動きの形', keyFn:function(h){ return h.ind&&h.ind.shape; }, labelMap:{uptrend:'切り上げ型', downtrend:'切り下げ型', range:'レンジ型'}},
+      {name:'時間軸', keyFn:function(h){ return h.timeframe; }, labelMap:{daily:'日足', weekly:'週足', monthly:'月足'}}
+    ];
+    dims.forEach(function(d){
+      var rows = groupAccuracy(attemptHistory, d.keyFn, d.labelMap).filter(function(r){ return r.total>=3; });
+      if(rows.length===0) return;
+      html += '<div class="report-section"><div class="report-section-h">'+d.name+'</div>';
+      rows.forEach(function(r){ html += reportBarRow(r.label, r.correct, r.total, r.rate); });
+      html += '</div>';
+    });
+
+    var byCode = {};
+    attemptHistory.forEach(function(h){
+      if(!byCode[h.code]) byCode[h.code] = {name:h.name, total:0, miss:0};
+      byCode[h.code].total++;
+      if(!h.correct) byCode[h.code].miss++;
+    });
+    var missRanked = Object.keys(byCode).map(function(c){
+      return {code:c, name:byCode[c].name, total:byCode[c].total, miss:byCode[c].miss};
+    }).filter(function(r){ return r.total>=3 && r.miss>0; })
+      .sort(function(a,b){ return (b.miss/b.total)-(a.miss/a.total); })
+      .slice(0,5);
+    if(missRanked.length){
+      html += '<div class="report-section"><div class="report-section-h">間違えやすい銘柄</div>';
+      missRanked.forEach(function(r){ html += reportBarRow(r.code+' '+r.name, r.total-r.miss, r.total, (r.total-r.miss)/r.total); });
+      html += '</div>';
+    }
+
+    var dueCount = reviewPool().length;
+    html += '<div class="report-note">'+(dueCount>0
+      ? '現在 '+dueCount+' 問が復習待ちです。'+REVIEW_EVERY+'問ごとに1問、過去に間違えた問題が混ざって出題されます。'
+      : '現在、復習待ちの問題はありません。')+'</div>';
+
+    body.innerHTML = html;
+  }
+
+  document.getElementById('reportBtn').addEventListener('click', function(){
+    renderReport();
+    document.getElementById('reportOverlay').hidden = false;
+  });
+  document.getElementById('reportClose').addEventListener('click', function(){
+    document.getElementById('reportOverlay').hidden = true;
+  });
+  document.getElementById('reportOverlay').addEventListener('click', function(e){
+    if(e.target.id==='reportOverlay') document.getElementById('reportOverlay').hidden = true;
+  });
 
   document.getElementById('btnUp').addEventListener('click', function(){ answer('up'); });
   document.getElementById('btnDown').addEventListener('click', function(){ answer('down'); });
