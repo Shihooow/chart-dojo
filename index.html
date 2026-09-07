@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>チャート道場</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+Antique:wght@500;700;900&family=Noto+Sans+JP:wght@400;500;700&family=Roboto+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg: #0a0d12;
+    --bg-soft: #0d1117;
+    --panel: #121821;
+    --panel-2: #161d28;
+    --border: #232c39;
+    --border-soft: #1a212c;
+    --ink: #e9edf3;
+    --ink-dim: #9aa7b8;
+    --ink-mute: #5d6a7c;
+    --gold: #d8a94a;
+    --gold-soft: #6b5730;
+    --up: #e0464f;      /* 陽線 (日本の慣習: 上昇=赤) */
+    --down: #4f8fe8;    /* 陰線 (日本の慣習: 下落=青) */
+    --band: #8b7ad1;    /* ボリンジャーバンド */
+    --good: #3fcf8e;
+    --miss: #e6924a;
+  }
+
+  *{ box-sizing:border-box; }
+  body{ background:var(--bg); }
+
+  .app{
+    max-width: 940px;
+    margin: 0 auto;
+    padding: 28px 20px 64px;
+    font-family: "Noto Sans JP", "Hiragino Sans", sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+  }
+
+  .num{ font-family:"Roboto Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+  header{
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap: 16px;
+    margin-bottom: 22px;
+    flex-wrap: wrap;
+  }
+  .brand{ display:flex; flex-direction:column; gap:4px; }
+  .brand .kicker{ font-size: 12px; letter-spacing: 0.14em; color: var(--gold); font-weight:500; }
+  h1{
+    font-family:"Zen Kaku Gothic Antique", "Noto Sans JP", sans-serif;
+    font-weight: 900;
+    font-size: clamp(24px, 4vw, 32px);
+    margin:0;
+    letter-spacing: 0.01em;
+    text-wrap: balance;
+  }
+  .lede{ color:var(--ink-dim); font-size:13.5px; margin-top:2px; max-width:58ch; }
+
+  .stats{ display:flex; gap:10px; }
+  .stat{
+    background: var(--panel);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding: 8px 14px;
+    min-width: 76px;
+    text-align:center;
+  }
+  .stat .v{ font-family:"Roboto Mono",monospace; font-size:19px; font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums; }
+  .stat .l{ font-size:10.5px; color:var(--ink-mute); letter-spacing:0.06em; margin-top:2px; }
+
+  .round-meta{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:10px; flex-wrap: wrap; gap:8px;
+  }
+  .ticker-tag{
+    font-size: 14px; color: var(--ink);
+    background: var(--panel); border:1px solid var(--border);
+    padding:6px 12px; border-radius:8px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .ticker-tag .code{ font-family:"Roboto Mono",monospace; color:var(--gold); font-weight:600; }
+  .real-note{ font-size:11px; color:var(--ink-mute); }
+  .real-note b{ color:var(--good); font-weight:600; }
+
+  .chart-card{
+    background: var(--bg-soft);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding: 14px 10px 6px;
+    position:relative;
+    overflow:hidden;
+  }
+  .chart-card::before{
+    content:"";
+    position:absolute; inset:0;
+    background: radial-gradient(120% 90% at 15% 0%, rgba(216,169,74,0.05), transparent 55%);
+    pointer-events:none;
+  }
+  canvas{ display:block; width:100%; }
+  #priceCanvas{ height:320px; }
+  #volCanvas{ height:64px; margin-top:2px; }
+
+  .legend{
+    display:flex; gap:16px; flex-wrap:wrap;
+    padding: 8px 4px 2px;
+    font-size:11px; color:var(--ink-mute);
+  }
+  .legend span{ display:inline-flex; align-items:center; gap:5px; }
+  .legend i{ width:10px; height:2px; display:inline-block; border-radius:2px; }
+
+  .controls{ margin-top: 20px; }
+  .horizon-row{
+    display:flex; align-items:center; gap:12px; justify-content:center;
+    margin-bottom:16px; flex-wrap:wrap;
+  }
+  .horizon-row .q{ font-size:13px; color:var(--ink-dim); }
+  .seg{ display:inline-flex; background: var(--panel); border:1px solid var(--border); border-radius:9px; padding:3px; gap:2px; }
+  .seg button{
+    font-family:"Noto Sans JP",sans-serif; font-size:12.5px; color: var(--ink-dim);
+    background:transparent; border:none; padding:6px 12px; border-radius:6px; cursor:pointer;
+  }
+  .seg button.active{ background: var(--gold-soft); color: var(--ink); font-weight:600; }
+  .seg button:disabled{ cursor:default; opacity:0.55; }
+
+  .predict-row{ display:flex; gap:14px; justify-content:center; }
+  .predict-btn{
+    flex: 1 1 240px; max-width: 300px;
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    padding: 18px 20px; border-radius: 12px;
+    font-family:"Zen Kaku Gothic Antique", sans-serif; font-weight:700; font-size: 18px;
+    cursor:pointer; border: 1.5px solid; transition: transform 0.08s ease, filter 0.15s ease;
+    background: transparent;
+  }
+  .predict-btn:hover:not(:disabled){ filter:brightness(1.15); transform: translateY(-1px); }
+  .predict-btn:active:not(:disabled){ transform: translateY(0); }
+  .predict-btn:disabled{ opacity:0.4; cursor:default; }
+  .predict-btn.up{ border-color: var(--up); color: var(--up); background: rgba(224,70,79,0.08); }
+  .predict-btn.down{ border-color: var(--down); color: var(--down); background: rgba(79,143,232,0.08); }
+  .predict-btn .arrow{ font-size:20px; line-height:1; }
+
+  .reveal{ margin-top: 22px; animation: rise 0.35s ease both; }
+  @keyframes rise{ from{ opacity:0; transform: translateY(6px);} to{ opacity:1; transform:none; } }
+  .verdict{ display:flex; align-items:center; gap:12px; padding: 14px 18px; border-radius: 12px; margin-bottom: 16px; flex-wrap:wrap; }
+  .verdict.hit{ background: rgba(63,207,142,0.1); border:1px solid rgba(63,207,142,0.35); }
+  .verdict.miss{ background: rgba(230,146,74,0.1); border:1px solid rgba(230,146,74,0.35); }
+  .verdict .mark{ font-size:26px; font-weight:900; font-family:"Zen Kaku Gothic Antique",sans-serif; }
+  .verdict.hit .mark{ color: var(--good); }
+  .verdict.miss .mark{ color: var(--miss); }
+  .verdict .detail{ font-size:13px; color:var(--ink-dim); }
+  .verdict .detail b{ color:var(--ink); font-family:"Roboto Mono",monospace; }
+
+  .indicator-row{
+    display:grid; grid-template-columns: repeat(auto-fit, minmax(158px,1fr));
+    gap: 10px; margin-bottom: 16px;
+  }
+  .ind{ background: var(--panel); border:1px solid var(--border); border-radius: 10px; padding: 10px 13px; }
+  .ind .lab{ font-size:10.5px; color:var(--ink-mute); letter-spacing:0.05em; margin-bottom:5px; }
+  .ind .val{ font-size:14.5px; font-weight:600; line-height:1.4; }
+  .pill{ display:inline-block; font-size:11.5px; padding: 2px 8px; border-radius: 999px; font-weight:600; margin-left:2px; }
+  .pill.bull{ background: rgba(224,70,79,0.16); color:#f0868d; }
+  .pill.bear{ background: rgba(79,143,232,0.16); color:#8fb8f0; }
+  .pill.flat{ background: rgba(154,167,184,0.16); color: var(--ink-dim); }
+
+  .explain{
+    background: var(--panel-2); border:1px solid var(--border); border-left: 3px solid var(--gold);
+    border-radius: 10px; padding: 16px 18px; font-size: 14px; line-height: 1.85; color: #d3d9e2;
+  }
+  .explain .h{ font-family:"Zen Kaku Gothic Antique",sans-serif; font-weight:700; color: var(--gold); font-size: 13px; margin-bottom: 8px; letter-spacing: 0.02em; }
+
+  .next-row{ margin-top: 18px; display:flex; justify-content:center; }
+  #nextBtn{
+    font-family:"Zen Kaku Gothic Antique",sans-serif; font-weight:700; font-size:15px;
+    color: var(--bg); background: var(--gold); border:none; padding: 13px 34px; border-radius: 10px;
+    cursor:pointer; box-shadow: 0 8px 22px -10px rgba(216,169,74,0.55);
+  }
+  #nextBtn:hover{ filter:brightness(1.06); }
+
+  #loadState{ text-align:center; color:var(--ink-dim); padding:60px 0; font-size:13px; }
+
+  footer{
+    margin-top: 34px; padding-top: 16px; border-top: 1px solid var(--border-soft);
+    font-size: 11.5px; color: var(--ink-mute); line-height:1.8;
+  }
+  footer a{ color: var(--ink-mute); }
+
+  @media (max-width: 520px){
+    .predict-row{ flex-direction:column; align-items:stretch; }
+    .predict-btn{ max-width:none; }
+    .stats{ width:100%; justify-content:space-between; }
+    .stat{ min-width:0; flex:1; }
+  }
+</style>
+
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <div class="kicker">CHART READING TRAINING</div>
+      <h1>チャート道場</h1>
+      <div class="lede">実在する日本株のチャートで、次の値動きを予想して当てるトレーニング。出来高・取引代金・RSI・ボリンジャーバンドをセットで確認しながら読む練習ができます。</div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="v num" id="statCount">0</div><div class="l">出題数</div></div>
+      <div class="stat"><div class="v num" id="statRate">–</div><div class="l">正答率</div></div>
+      <div class="stat"><div class="v num" id="statStreak">0</div><div class="l">連続正解</div></div>
+      <div class="stat"><div class="v num" id="statBest">0</div><div class="l">最高連続</div></div>
+    </div>
+  </header>
+
+  <div id="loadState">読み込み中…</div>
+
+  <div id="game" hidden>
+    <div class="round-meta">
+      <div class="ticker-tag"><span class="code" id="tickerCode">----</span><span id="tickerName">–</span></div>
+      <div class="real-note"><b>実データ</b> ・ Yahoo!ファイナンス取得（<span id="dataRange">–</span>）</div>
+    </div>
+
+    <div class="chart-card">
+      <canvas id="priceCanvas"></canvas>
+      <canvas id="volCanvas"></canvas>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--up)"></i>陽線(上昇)</span>
+      <span><i style="background:var(--down)"></i>陰線(下落)</span>
+      <span><i style="background:var(--band)"></i>ボリンジャーバンド(±2σ)</span>
+      <span><i style="background:var(--gold)"></i>予想時点</span>
+    </div>
+
+    <div class="controls">
+      <div class="horizon-row">
+        <span class="q">予想期間:</span>
+        <div class="seg" id="horizonSeg">
+          <button data-h="1" class="active">翌日</button>
+          <button data-h="3">3日後</button>
+          <button data-h="5">5日後</button>
+        </div>
+      </div>
+      <div class="predict-row">
+        <button class="predict-btn up" id="btnUp"><span class="arrow">▲</span>上がる</button>
+        <button class="predict-btn down" id="btnDown"><span class="arrow">▼</span>下がる</button>
+      </div>
+    </div>
+
+    <div class="reveal" id="reveal" hidden>
+      <div class="verdict" id="verdict">
+        <div class="mark" id="verdictMark">–</div>
+        <div class="detail" id="verdictDetail">–</div>
+      </div>
+
+      <div class="indicator-row">
+        <div class="ind"><div class="lab">短期トレンド</div><div class="val" id="indTrend">–</div></div>
+        <div class="ind"><div class="lab">RSI (14)</div><div class="val" id="indRsi">–</div></div>
+        <div class="ind"><div class="lab">ボリンジャーバンド</div><div class="val" id="indBB">–</div></div>
+        <div class="ind"><div class="lab">取引代金(概算)</div><div class="val" id="indTurnover">–</div></div>
+        <div class="ind"><div class="lab">直近の値動きの形</div><div class="val" id="indShape">–</div></div>
+      </div>
+
+      <div class="explain">
+        <div class="h">解説</div>
+        <div id="explainText">–</div>
+      </div>
+
+      <div class="next-row"><button id="nextBtn">次の問題へ →</button></div>
+    </div>
+  </div>
+
+  <footer>
+    データはYahoo!ファイナンスの個別銘柄ヒストリカルデータを実際に取得したものです（毎営業日、自動で最新の1日分を追記）。表示している指標や解説は投資助言ではなく、チャートを読む練習のためのものです。実際の相場では、同じ指標が示されていても逆の値動きになることは普通にあります。取引代金は終値×出来高による概算値です。
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  function sma(arr,n,endIdx){
+    var s=0,c=0;
+    for(var i=Math.max(0,endIdx-n+1);i<=endIdx;i++){ s+=arr[i]; c++; }
+    return s/c;
+  }
+  function stddev(arr,n,endIdx,mean){
+    var s=0,c=0;
+    for(var i=Math.max(0,endIdx-n+1);i<=endIdx;i++){ s+=(arr[i]-mean)*(arr[i]-mean); c++; }
+    return Math.sqrt(s/c);
+  }
+  function rsi(closes, period, endIdx){
+    var gains=0, losses=0, count=0;
+    for(var i=Math.max(1,endIdx-period+1); i<=endIdx; i++){
+      var diff = closes[i]-closes[i-1];
+      if(diff>=0) gains+=diff; else losses-=diff;
+      count++;
+    }
+    if(count===0) return 50;
+    var avgG=gains/count, avgL=losses/count;
+    if(avgL===0) return 100;
+    var rs=avgG/avgL;
+    return 100-(100/(1+rs));
+  }
+  function fmt(n){ return Math.round(n).toLocaleString(); }
+  function fmtYen(n){
+    if(n>=100000000) return (n/100000000).toFixed(1)+'億円';
+    if(n>=10000) return Math.round(n/10000).toLocaleString()+'万円';
+    return Math.round(n).toLocaleString()+'円';
+  }
+
+  var stocks = [];
+  var horizon = 1;
+  var current = null;   // {code,name,candles[]}
+  var VISIBLE = 15;
+  var LONG = 15;         // dynamic SMA/BB period, adapts to available history
+  var phase = 'predicting';
+  var revealCount = 0;
+  var revealTimer = null;
+
+  var stats = {count:0, correct:0, streak:0, best:0};
+  try{ var saved = JSON.parse(localStorage.getItem('chartDojoRealStats')||'null'); if(saved) stats = saved; }catch(e){}
+  function saveStats(){ try{ localStorage.setItem('chartDojoRealStats', JSON.stringify(stats)); }catch(e){} }
+  function renderStats(){
+    document.getElementById('statCount').textContent = stats.count;
+    document.getElementById('statRate').textContent = stats.count? Math.round(stats.correct/stats.count*100)+'%' : '–';
+    document.getElementById('statStreak').textContent = stats.streak;
+    document.getElementById('statBest').textContent = stats.best;
+  }
+
+  var priceCanvas = document.getElementById('priceCanvas');
+  var volCanvas = document.getElementById('volCanvas');
+
+  function fitCanvas(cv, cssH){
+    var dpr = window.devicePixelRatio||1;
+    var w = cv.parentElement.clientWidth - 20;
+    cv.style.width = w+'px'; cv.style.height = cssH+'px';
+    cv.width = Math.round(w*dpr); cv.height = Math.round(cssH*dpr);
+    var ctx = cv.getContext('2d');
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {w:w,h:cssH,ctx:ctx};
+  }
+
+  function draw(){
+    var closes = current.candles.map(function(c){return c.c;});
+    var visN = VISIBLE, shownN = visN + revealCount;
+    var data = current.candles.slice(0, shownN);
+
+    var pf = fitCanvas(priceCanvas, 320);
+    var vf = fitCanvas(volCanvas, 64);
+    var ctx = pf.ctx, W=pf.w, H=pf.h;
+    var vctx2 = vf.ctx, VW=vf.w, VH=vf.h;
+    ctx.clearRect(0,0,W,H); vctx2.clearRect(0,0,VW,VH);
+
+    var padL=6, padR=54, padT=10, padB=8;
+    var plotW = W-padL-padR;
+    var n = data.length;
+    var slot = plotW/n;
+    var bodyW = Math.max(2, Math.min(9, slot*0.62));
+
+    // include BB bands in range calc
+    var maxH=-Infinity, minL=Infinity;
+    for(var i=0;i<n;i++){ maxH=Math.max(maxH,data[i].h); minL=Math.min(minL,data[i].l); }
+    var bbSeries = [];
+    for(i=0;i<n;i++){
+      if(i>=LONG-1){
+        var mid = sma(closes,LONG,i);
+        var sd = stddev(closes,LONG,i,mid);
+        var up = mid+2*sd, lo = mid-2*sd;
+        bbSeries.push({mid:mid,up:up,lo:lo});
+        maxH=Math.max(maxH,up); minL=Math.min(minL,lo);
+      } else bbSeries.push(null);
+    }
+    var range=(maxH-minL)||1; maxH+=range*0.06; minL-=range*0.06; range=maxH-minL;
+
+    function yOf(p){ return padT + (maxH-p)/range*(H-padT-padB); }
+    function xOf(i){ return padL + i*slot + slot/2; }
+
+    ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.fillStyle='#5d6a7c';
+    ctx.font='10px "Roboto Mono", monospace'; ctx.textAlign='left';
+    var gridLines=4;
+    for(var g=0; g<=gridLines; g++){
+      var p = minL + range*g/gridLines; var y=yOf(p);
+      ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(W-padR+6,y); ctx.stroke();
+      ctx.fillText(fmt(p), W-padR+10, y+3);
+    }
+
+    if(revealCount>0 || phase==='revealed'){
+      var xdiv = xOf(visN-1) + slot/2;
+      ctx.setLineDash([4,4]); ctx.strokeStyle='rgba(216,169,74,0.55)';
+      ctx.beginPath(); ctx.moveTo(xdiv,padT); ctx.lineTo(xdiv,H-padB); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle='#d8a94a'; ctx.font='10px "Noto Sans JP", sans-serif'; ctx.textAlign='center';
+      ctx.fillText('予想時点', xdiv, 10);
+    }
+
+    // Bollinger band (draw as connected lines)
+    function pathBB(key, color, width){
+      ctx.beginPath(); var started=false;
+      for(var i=0;i<n;i++){
+        if(!bbSeries[i]) continue;
+        var x=xOf(i), y=yOf(bbSeries[i][key]);
+        if(!started){ ctx.moveTo(x,y); started=true; } else ctx.lineTo(x,y);
+      }
+      if(started){ ctx.strokeStyle=color; ctx.lineWidth=width; ctx.stroke(); }
+    }
+    pathBB('up','rgba(139,122,209,0.55)',1.2);
+    pathBB('lo','rgba(139,122,209,0.55)',1.2);
+    pathBB('mid','rgba(139,122,209,0.85)',1.3);
+
+    var maxV=0; for(i=0;i<n;i++) maxV=Math.max(maxV,data[i].v);
+
+    for(i=0;i<n;i++){
+      var c = data[i]; var up = c.c>=c.o; var col = up? '#e0464f' : '#4f8fe8';
+      var x = xOf(i);
+      ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(x,yOf(c.h)); ctx.lineTo(x,yOf(c.l)); ctx.stroke();
+      var yO=yOf(c.o), yC=yOf(c.c);
+      var top=Math.min(yO,yC), h=Math.max(1.5, Math.abs(yC-yO));
+      ctx.fillRect(x-bodyW/2, top, bodyW, h);
+
+      var vh=(c.v/maxV)*(VH-6);
+      vctx2.fillStyle = up? 'rgba(224,70,79,0.55)' : 'rgba(79,143,232,0.55)';
+      vctx2.fillRect(x-bodyW/2, VH-vh, bodyW, vh);
+    }
+    vctx2.fillStyle='rgba(154,167,184,0.55)'; vctx2.font='9px "Noto Sans JP", sans-serif'; vctx2.textAlign='left';
+    vctx2.fillText('出来高', 2, 10);
+
+    var lastP = data[n-1].c;
+    var ly = yOf(lastP);
+    ctx.fillStyle='rgba(216,169,74,0.16)'; ctx.fillRect(W-padR+2, ly-8, 50, 16);
+    ctx.fillStyle='#d8a94a'; ctx.font='10px "Roboto Mono", monospace'; ctx.textAlign='left';
+    ctx.fillText(fmt(lastP), W-padR+6, ly+3);
+  }
+
+  function computeIndicators(){
+    var closes = current.candles.slice(0,VISIBLE).map(function(c){return c.c;});
+    var vols = current.candles.slice(0,VISIBLE).map(function(c){return c.v;});
+    var idx = VISIBLE-1;
+    var s5 = sma(closes,5,idx), sLong = sma(closes,LONG,idx);
+    var mid = sLong, sd = stddev(closes,LONG,idx,mid);
+    var upBand = mid+2*sd, loBand = mid-2*sd;
+    var r = rsi(closes,14,idx);
+    var lastClose = closes[idx];
+    var z = sd>0 ? (lastClose-mid)/sd : 0;
+
+    var lastN = current.candles.slice(Math.max(0,VISIBLE-10),VISIBLE);
+    var half = Math.floor(lastN.length/2);
+    var firstH = Math.max.apply(null, lastN.slice(0,half).map(function(c){return c.h;}));
+    var secondH = Math.max.apply(null, lastN.slice(half).map(function(c){return c.h;}));
+    var firstL = Math.min.apply(null, lastN.slice(0,half).map(function(c){return c.l;}));
+    var secondL = Math.min.apply(null, lastN.slice(half).map(function(c){return c.l;}));
+    var shape = (secondH>firstH && secondL>firstL) ? 'uptrend' : (secondH<firstH && secondL<firstL) ? 'downtrend' : 'range';
+
+    var turnover = current.candles[idx].turnover;
+    var avgTurnover5 = 0; for(var i=Math.max(0,idx-4);i<=idx;i++) avgTurnover5+=current.candles[i].turnover; avgTurnover5/=Math.min(5,idx+1);
+    var turnoverRatio = avgTurnover5>0 ? turnover/avgTurnover5 : 1;
+
+    var score=0;
+    score += (s5>sLong)?1:-1;
+    if(r>=58) score+=0.6; else if(r<=42) score-=0.6;
+    if(shape==='uptrend') score+=1; else if(shape==='downtrend') score-=1;
+    if(z>=1.5) score-=0.4; else if(z<=-1.5) score+=0.4; // near band edges -> mean reversion nudge
+
+    return {s5:s5,sLong:sLong,rsi:r,shape:shape,score:score,mid:mid,upBand:upBand,loBand:loBand,z:z,turnover:turnover,turnoverRatio:turnoverRatio};
+  }
+
+  function buildExplanation(ind, actualUp, changePct){
+    var bias = ind.score>0.5?'up': ind.score<-0.5?'down':'mixed';
+    var lines=[];
+    lines.push(ind.s5>ind.sLong
+      ? '短期線(SMA5)が'+LONG+'日線の上にあり、直近の勢いはやや強気寄りでした（SMA5: '+fmt(ind.s5)+' / SMA'+LONG+': '+fmt(ind.sLong)+'）。'
+      : '短期線(SMA5)が'+LONG+'日線の下にあり、直近の勢いはやや弱気寄りでした（SMA5: '+fmt(ind.s5)+' / SMA'+LONG+': '+fmt(ind.sLong)+'）。');
+
+    if(ind.rsi>=70) lines.push('RSIは'+ind.rsi.toFixed(0)+'と買われすぎ寄りの水準でした。');
+    else if(ind.rsi<=30) lines.push('RSIは'+ind.rsi.toFixed(0)+'と売られすぎ寄りの水準でした。');
+    else lines.push('RSIは'+ind.rsi.toFixed(0)+'で中立圏でした。');
+
+    if(ind.z>=1.5) lines.push('株価はボリンジャーバンドの上限付近まで拡張しており、短期的な反落リスクも意識される位置でした。');
+    else if(ind.z<=-1.5) lines.push('株価はボリンジャーバンドの下限付近まで拡張しており、自律反発も意識される位置でした。');
+    else lines.push('株価はボリンジャーバンドの中央帯付近で、バンドからの過熱シグナルは出ていませんでした。');
+
+    if(ind.turnoverRatio>=1.4) lines.push('取引代金は直近5日平均の'+ind.turnoverRatio.toFixed(1)+'倍に増えており、値動きへの関心が高まっていました。');
+
+    if(ind.shape==='uptrend') lines.push('直近10本は高値・安値ともに切り上がる上昇の形でした。');
+    else if(ind.shape==='downtrend') lines.push('直近10本は高値・安値ともに切り下がる下降の形でした。');
+    else lines.push('直近10本は方向感に乏しくレンジ気味の値動きでした。');
+
+    var biasText = bias==='up' ? '複数の指標が上向きに揃っていました' : bias==='down' ? '複数の指標が下向きに揃っていました' : '指標同士がはっきり揃わず、判断が割れやすい局面でした';
+    var actualText = actualUp ? '実際の値動きは上昇' : '実際の値動きは下落';
+    var matched = (bias==='up'&&actualUp) || (bias==='down'&&!actualUp);
+    var closing;
+    if(bias==='mixed'){
+      closing = biasText+'。'+actualText+'（'+(changePct>=0?'+':'')+changePct.toFixed(1)+'%）となりましたが、こういう場面は指標だけで方向を決め切るのが難しく、外れても自然な結果です。';
+    } else if(matched){
+      closing = biasText+'。'+actualText+'（'+(changePct>=0?'+':'')+changePct.toFixed(1)+'%）となり、指標が示していた方向と一致しました。ただし相場に絶対はなく、同じ形でも逆に動くことは普通にあります。';
+    } else {
+      closing = biasText+'が、'+actualText+'（'+(changePct>=0?'+':'')+changePct.toFixed(1)+'%）となり、指標が示していた方向とは逆に動きました。指標が一致していても外れることは珍しくない、という感覚を持っておくと実戦で役立ちます。';
+    }
+    lines.push(closing);
+    return lines.join(' ');
+  }
+
+  function pickTicker(){
+    var eligible = stocks.filter(function(s){ return s.candles.length>=16; });
+    return eligible[Math.floor(Math.random()*eligible.length)];
+  }
+
+  function newRound(){
+    current = pickTicker();
+    var total = current.candles.length;
+    VISIBLE = Math.max(10, total-5);
+    LONG = Math.min(20, VISIBLE);
+    phase='predicting'; revealCount=0;
+
+    document.getElementById('tickerCode').textContent = current.code;
+    document.getElementById('tickerName').textContent = current.name;
+    document.getElementById('dataRange').textContent = current.candles[0].date+' 〜 '+current.candles[VISIBLE-1].date;
+    document.getElementById('reveal').hidden = true;
+    document.getElementById('btnUp').disabled = false;
+    document.getElementById('btnDown').disabled = false;
+    setHorizonLock(false);
+    draw();
+  }
+
+  function setHorizonLock(locked){
+    document.querySelectorAll('#horizonSeg button').forEach(function(b){ b.disabled = locked; });
+  }
+
+  function answer(choice){
+    if(phase!=='predicting') return;
+    phase='revealed';
+    document.getElementById('btnUp').disabled = true;
+    document.getElementById('btnDown').disabled = true;
+    setHorizonLock(true);
+
+    var lastClose = current.candles[VISIBLE-1].c;
+    var futureClose = current.candles[VISIBLE-1+horizon].c;
+    var actualUp = futureClose>lastClose;
+    var changePct = (futureClose-lastClose)/lastClose*100;
+    var correct = (choice==='up'&&actualUp) || (choice==='down'&&!actualUp);
+
+    stats.count++;
+    if(correct){ stats.correct++; stats.streak++; stats.best=Math.max(stats.best,stats.streak); } else { stats.streak=0; }
+    saveStats(); renderStats();
+
+    var ind = computeIndicators();
+
+    document.getElementById('verdict').className = 'verdict '+(correct?'hit':'miss');
+    document.getElementById('verdictMark').textContent = correct?'正解！':'不正解';
+    document.getElementById('verdictDetail').innerHTML = (horizon===1?'翌日':horizon+'日後')+'の終値は <b>'+fmt(lastClose)+'</b> → <b>'+fmt(futureClose)+'</b>（'+(changePct>=0?'+':'')+changePct.toFixed(1)+'%）';
+
+    document.getElementById('indTrend').innerHTML = (ind.s5>ind.sLong? 'SMA5 > SMA'+LONG+' <span class="pill bull">強気</span>' : 'SMA5 < SMA'+LONG+' <span class="pill bear">弱気</span>');
+    document.getElementById('indRsi').innerHTML = ind.rsi.toFixed(0) + (ind.rsi>=70?' <span class="pill bull">過熱</span>': ind.rsi<=30?' <span class="pill bear">売られ過ぎ</span>':' <span class="pill flat">中立</span>');
+    document.getElementById('indBB').innerHTML = (ind.z>=1.5? '上限付近 <span class="pill bull">拡張</span>' : ind.z<=-1.5? '下限付近 <span class="pill bear">拡張</span>' : '中央帯 <span class="pill flat">平常</span>') + '<br><span style="font-size:11px;color:var(--ink-mute)">σ位置: '+ind.z.toFixed(2)+'</span>';
+    document.getElementById('indTurnover').innerHTML = fmtYen(ind.turnover) + '<br><span style="font-size:11px;color:var(--ink-mute)">5日平均比 '+ind.turnoverRatio.toFixed(1)+'倍</span>';
+    document.getElementById('indShape').innerHTML = ind.shape==='uptrend' ? '切り上げ型 <span class="pill bull">上昇</span>' : ind.shape==='downtrend' ? '切り下げ型 <span class="pill bear">下降</span>' : 'レンジ型 <span class="pill flat">中立</span>';
+
+    document.getElementById('explainText').textContent = buildExplanation(ind, actualUp, changePct);
+    document.getElementById('reveal').hidden = false;
+
+    var target = horizon; revealCount = 0; clearInterval(revealTimer);
+    revealTimer = setInterval(function(){ revealCount++; draw(); if(revealCount>=target) clearInterval(revealTimer); }, 160);
+  }
+
+  document.getElementById('btnUp').addEventListener('click', function(){ answer('up'); });
+  document.getElementById('btnDown').addEventListener('click', function(){ answer('down'); });
+  document.getElementById('nextBtn').addEventListener('click', newRound);
+  document.querySelectorAll('#horizonSeg button').forEach(function(b){
+    b.addEventListener('click', function(){
+      if(b.disabled) return;
+      horizon = parseInt(b.getAttribute('data-h'),10);
+      document.querySelectorAll('#horizonSeg button').forEach(function(x){x.classList.remove('active');});
+      b.classList.add('active');
+    });
+  });
+  window.addEventListener('resize', function(){ if(current) draw(); });
+
+  renderStats();
+
+  fetch('./data.json').then(function(r){ return r.json(); }).then(function(j){
+    stocks = j.stocks;
+    document.getElementById('loadState').hidden = true;
+    document.getElementById('game').hidden = false;
+    newRound();
+  }).catch(function(err){
+    document.getElementById('loadState').textContent = 'データの読み込みに失敗しました（data.jsonを確認してください）';
+  });
+})();
+</script>
+</body>
+</html>
