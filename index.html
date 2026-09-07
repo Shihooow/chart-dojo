@@ -620,8 +620,7 @@
     });
   }
 
-  function newRound(){
-    current = pickTicker();
+  function startRound(){
     var candles = cds();
     var total = candles.length;
     VISIBLE = Math.max(10, total-5);
@@ -637,6 +636,20 @@
     document.getElementById('btnDown').disabled = false;
     setHorizonLock(false);
     draw();
+  }
+
+  function newRound(){
+    // 新しい問題: 銘柄をランダムに選び直す
+    current = pickTicker();
+    startRound();
+  }
+
+  function switchTimeframe(){
+    // 時間軸の切り替え: 同じ銘柄のまま表示だけ変える(その時間軸のデータが無い場合のみ銘柄を選び直す)
+    if(!current || !current[TIMEFRAME] || current[TIMEFRAME].length<16){
+      current = pickTicker();
+    }
+    startRound();
   }
 
   function setHorizonLock(locked){
@@ -700,7 +713,7 @@
       TIMEFRAME = tf;
       document.querySelectorAll('#tfSeg button').forEach(function(x){x.classList.remove('active');});
       b.classList.add('active');
-      newRound();
+      switchTimeframe();
     });
   });
   window.addEventListener('resize', function(){ if(current) draw(); });
