@@ -22,6 +22,7 @@
     --up: #e0464f;      /* 陽線 (日本の慣習: 上昇=赤) */
     --down: #4f8fe8;    /* 陰線 (日本の慣習: 下落=青) */
     --band: #8b7ad1;    /* ボリンジャーバンド */
+    --sma5: #5ec9c0;    /* 短期移動平均線(SMA5) */
     --good: #3fcf8e;
     --miss: #e6924a;
   }
@@ -231,7 +232,8 @@
     <div class="legend">
       <span><i style="background:var(--up)"></i>陽線(上昇)</span>
       <span><i style="background:var(--down)"></i>陰線(下落)</span>
-      <span><i style="background:var(--band)"></i>ボリンジャーバンド(±2σ)</span>
+      <span><i style="background:var(--sma5)"></i>SMA5</span>
+      <span><i style="background:var(--band)"></i><span id="legendBB">ボリンジャーバンド(中心線=SMA15, ±2σ)</span></span>
       <span><i style="background:#e6b84a"></i>RSI(14)・破線は70/30</span>
       <span><i style="background:#c7cede"></i>MACD</span>
       <span><i style="background:#d8a94a"></i>シグナル線</span>
@@ -406,7 +408,7 @@
     // band is visible across the whole chart rather than only appearing near the end)
     var maxH=-Infinity, minL=Infinity;
     for(var i=0;i<n;i++){ maxH=Math.max(maxH,data[i].h); minL=Math.min(minL,data[i].l); }
-    var bbSeries = [], rsiSeries = [];
+    var bbSeries = [], rsiSeries = [], sma5Series = [];
     for(i=0;i<n;i++){
       var mid = sma(closes,LONG,i);
       var sd = stddev(closes,LONG,i,mid);
@@ -414,9 +416,14 @@
       bbSeries.push({mid:mid,up:up,lo:lo});
       maxH=Math.max(maxH,up); minL=Math.min(minL,lo);
       rsiSeries.push(rsi(closes,14,i));
+      var s5v = sma(closes,5,i);
+      sma5Series.push(s5v);
+      maxH=Math.max(maxH,s5v); minL=Math.min(minL,s5v);
     }
     var macd = macdSeries(closes.slice(0,n));
     var range=(maxH-minL)||1; maxH+=range*0.06; minL-=range*0.06; range=maxH-minL;
+    var legendBBEl = document.getElementById('legendBB');
+    if(legendBBEl) legendBBEl.textContent = 'ボリンジャーバンド(中心線=SMA'+LONG+', ±2σ)';
 
     function yOf(p){ return padT + (maxH-p)/range*(H-padT-padB); }
     function xOf(i){ return padL + i*slot + slot/2; }
@@ -470,6 +477,11 @@
     }
     vctx2.fillStyle='rgba(154,167,184,0.55)'; vctx2.font='9px "Noto Sans JP", sans-serif'; vctx2.textAlign='left';
     vctx2.fillText('出来高', 2, 10);
+
+    // SMA5 (短期移動平均線) を陽線/陰線の上に重ねて描画
+    ctx.beginPath();
+    for(i=0;i<n;i++){ var s5x=xOf(i), s5y=yOf(sma5Series[i]); if(i===0) ctx.moveTo(s5x,s5y); else ctx.lineTo(s5x,s5y); }
+    ctx.strokeStyle='#5ec9c0'; ctx.lineWidth=1.5; ctx.stroke();
 
     // RSI subplot (fixed 0-100 scale, 70/30 reference lines)
     var rPadT=8, rPadB=8;
