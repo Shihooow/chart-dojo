@@ -202,7 +202,7 @@
     <div class="brand">
       <div class="kicker">CHART READING TRAINING</div>
       <h1>チャート道場</h1>
-      <div class="lede">実在する日本株のチャートで、次の値動きを予想して当てるトレーニング。出来高・取引代金・RSI・ボリンジャーバンドをセットで確認しながら読む練習ができます。</div>
+      <div class="lede">実在する日本株のチャートで、次の値動きを予想して当てるトレーニング。日足・週足・月足を切り替えながら、出来高・取引代金・RSI・ボリンジャーバンドをセットで確認して読む練習ができます。</div>
     </div>
     <div class="stats">
       <div class="stat"><div class="v num" id="statCount">0</div><div class="l">出題数</div></div>
@@ -232,6 +232,14 @@
     </div>
 
     <div class="controls">
+      <div class="horizon-row">
+        <span class="q">時間軸:</span>
+        <div class="seg" id="tfSeg">
+          <button data-tf="daily" class="active">日足</button>
+          <button data-tf="weekly">週足</button>
+          <button data-tf="monthly">月足</button>
+        </div>
+      </div>
       <div class="horizon-row">
         <span class="q">予想期間:</span>
         <div class="seg" id="horizonSeg">
@@ -270,7 +278,7 @@
   </div>
 
   <footer>
-    データはYahoo!ファイナンスの個別銘柄ヒストリカルデータを実際に取得したものです（毎営業日、自動で最新の1日分を追記）。表示している指標や解説は投資助言ではなく、チャートを読む練習のためのものです。実際の相場では、同じ指標が示されていても逆の値動きになることは普通にあります。取引代金は終値×出来高による概算値です。
+    データはYahoo!ファイナンスの個別銘柄ヒストリカルデータを実際に取得したものです（毎営業日、自動で最新の1日分を追記）。週足・月足は取得した日足データを自動集計したものです。表示している指標や解説は投資助言ではなく、チャートを読む練習のためのものです。実際の相場では、同じ指標が示されていても逆の値動きになることは普通にあります。取引代金は終値×出来高による概算値です。
   </footer>
 </div>
 
@@ -310,7 +318,15 @@
 
   var stocks = [];
   var horizon = 1;
-  var current = null;   // {code,name,candles[]}
+  var current = null;   // {code,name,daily[],weekly[],monthly[]}
+  var TIMEFRAME = 'daily';
+  var TF_META = {
+    daily:   { label:'日足', unit:'日',   next:'翌日',  after:function(h){ return h+'日後'; } },
+    weekly:  { label:'週足', unit:'週',   next:'翌週',  after:function(h){ return h+'週間後'; } },
+    monthly: { label:'月足', unit:'ヶ月', next:'翌月',  after:function(h){ return h+'ヶ月後'; } }
+  };
+  function horizonLabel(h){ var m=TF_META[TIMEFRAME]; return h===1? m.next : m.after(h); }
+  function cds(stock){ return (stock||current)[TIMEFRAME]; }
   var VISIBLE = 15;
   var LONG = 15;         // dynamic SMA/BB period, adapts to available history
   var phase = 'predicting';
@@ -341,9 +357,10 @@
   }
 
   function draw(){
-    var closes = current.candles.map(function(c){return c.c;});
+    var candles = cds();
+    var closes = candles.map(function(c){return c.c;});
     var visN = VISIBLE, shownN = visN + revealCount;
-    var data = current.candles.slice(0, shownN);
+    var data = candles.slice(0, shownN);
 
     var pf = fitCanvas(priceCanvas, 320);
     var vf = fitCanvas(volCanvas, 64);
@@ -433,8 +450,9 @@
   }
 
   function computeIndicators(){
-    var closes = current.candles.slice(0,VISIBLE).map(function(c){return c.c;});
-    var vols = current.candles.slice(0,VISIBLE).map(function(c){return c.v;});
+    var candles = cds();
+    var closes = candles.slice(0,VISIBLE).map(function(c){return c.c;});
+    var vols = candles.slice(0,VISIBLE).map(function(c){return c.v;});
     var idx = VISIBLE-1;
     var s5 = sma(closes,5,idx), sLong = sma(closes,LONG,idx);
     var mid = sLong, sd = stddev(closes,LONG,idx,mid);
@@ -443,7 +461,7 @@
     var lastClose = closes[idx];
     var z = sd>0 ? (lastClose-mid)/sd : 0;
 
-    var lastN = current.candles.slice(Math.max(0,VISIBLE-10),VISIBLE);
+    var lastN = candles.slice(Math.max(0,VISIBLE-10),VISIBLE);
     var half = Math.floor(lastN.length/2);
     var firstH = Math.max.apply(null, lastN.slice(0,half).map(function(c){return c.h;}));
     var secondH = Math.max.apply(null, lastN.slice(half).map(function(c){return c.h;}));
@@ -451,8 +469,8 @@
     var secondL = Math.min.apply(null, lastN.slice(half).map(function(c){return c.l;}));
     var shape = (secondH>firstH && secondL>firstL) ? 'uptrend' : (secondH<firstH && secondL<firstL) ? 'downtrend' : 'range';
 
-    var turnover = current.candles[idx].turnover;
-    var avgTurnover5 = 0; for(var i=Math.max(0,idx-4);i<=idx;i++) avgTurnover5+=current.candles[i].turnover; avgTurnover5/=Math.min(5,idx+1);
+    var turnover = candles[idx].turnover;
+    var avgTurnover5 = 0; for(var i=Math.max(0,idx-4);i<=idx;i++) avgTurnover5+=candles[i].turnover; avgTurnover5/=Math.min(5,idx+1);
     var turnoverRatio = avgTurnover5>0 ? turnover/avgTurnover5 : 1;
 
     var score=0;
@@ -501,20 +519,29 @@
   }
 
   function pickTicker(){
-    var eligible = stocks.filter(function(s){ return s.candles.length>=16; });
+    var eligible = stocks.filter(function(s){ return s[TIMEFRAME] && s[TIMEFRAME].length>=16; });
     return eligible[Math.floor(Math.random()*eligible.length)];
+  }
+
+  function refreshHorizonLabels(){
+    document.querySelectorAll('#horizonSeg button').forEach(function(b){
+      var h = parseInt(b.getAttribute('data-h'),10);
+      b.textContent = horizonLabel(h);
+    });
   }
 
   function newRound(){
     current = pickTicker();
-    var total = current.candles.length;
+    var candles = cds();
+    var total = candles.length;
     VISIBLE = Math.max(10, total-5);
     LONG = Math.min(20, VISIBLE);
     phase='predicting'; revealCount=0;
 
+    refreshHorizonLabels();
     document.getElementById('tickerCode').textContent = current.code;
     document.getElementById('tickerName').textContent = current.name;
-    document.getElementById('dataRange').textContent = current.candles[0].date+' 〜 '+current.candles[VISIBLE-1].date;
+    document.getElementById('dataRange').textContent = candles[0].date+' 〜 '+candles[VISIBLE-1].date+'（'+TF_META[TIMEFRAME].label+'）';
     document.getElementById('reveal').hidden = true;
     document.getElementById('btnUp').disabled = false;
     document.getElementById('btnDown').disabled = false;
@@ -523,7 +550,7 @@
   }
 
   function setHorizonLock(locked){
-    document.querySelectorAll('#horizonSeg button').forEach(function(b){ b.disabled = locked; });
+    document.querySelectorAll('#horizonSeg button, #tfSeg button').forEach(function(b){ b.disabled = locked; });
   }
 
   function answer(choice){
@@ -533,8 +560,9 @@
     document.getElementById('btnDown').disabled = true;
     setHorizonLock(true);
 
-    var lastClose = current.candles[VISIBLE-1].c;
-    var futureClose = current.candles[VISIBLE-1+horizon].c;
+    var candles = cds();
+    var lastClose = candles[VISIBLE-1].c;
+    var futureClose = candles[VISIBLE-1+horizon].c;
     var actualUp = futureClose>lastClose;
     var changePct = (futureClose-lastClose)/lastClose*100;
     var correct = (choice==='up'&&actualUp) || (choice==='down'&&!actualUp);
@@ -547,7 +575,7 @@
 
     document.getElementById('verdict').className = 'verdict '+(correct?'hit':'miss');
     document.getElementById('verdictMark').textContent = correct?'正解！':'不正解';
-    document.getElementById('verdictDetail').innerHTML = (horizon===1?'翌日':horizon+'日後')+'の終値は <b>'+fmt(lastClose)+'</b> → <b>'+fmt(futureClose)+'</b>（'+(changePct>=0?'+':'')+changePct.toFixed(1)+'%）';
+    document.getElementById('verdictDetail').innerHTML = horizonLabel(horizon)+'の終値は <b>'+fmt(lastClose)+'</b> → <b>'+fmt(futureClose)+'</b>（'+(changePct>=0?'+':'')+changePct.toFixed(1)+'%）';
 
     document.getElementById('indTrend').innerHTML = (ind.s5>ind.sLong? 'SMA5 > SMA'+LONG+' <span class="pill bull">強気</span>' : 'SMA5 < SMA'+LONG+' <span class="pill bear">弱気</span>');
     document.getElementById('indRsi').innerHTML = ind.rsi.toFixed(0) + (ind.rsi>=70?' <span class="pill bull">過熱</span>': ind.rsi<=30?' <span class="pill bear">売られ過ぎ</span>':' <span class="pill flat">中立</span>');
@@ -571,6 +599,17 @@
       horizon = parseInt(b.getAttribute('data-h'),10);
       document.querySelectorAll('#horizonSeg button').forEach(function(x){x.classList.remove('active');});
       b.classList.add('active');
+    });
+  });
+  document.querySelectorAll('#tfSeg button').forEach(function(b){
+    b.addEventListener('click', function(){
+      if(b.disabled) return;
+      var tf = b.getAttribute('data-tf');
+      if(tf===TIMEFRAME) return;
+      TIMEFRAME = tf;
+      document.querySelectorAll('#tfSeg button').forEach(function(x){x.classList.remove('active');});
+      b.classList.add('active');
+      newRound();
     });
   });
   window.addEventListener('resize', function(){ if(current) draw(); });
